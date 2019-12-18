@@ -19,11 +19,7 @@ ovs-vsctl --may-exist add-port br-int net0-gw -- \
 
 dhcp_options=$($NB create dhcp_options \
 	cidr=10.0.0.0/24 \
-	options='
-		"lease_time"="3600" \
-		"router"="10.0.0.1" \
-		"server_id"="10.0.0.1" \
-		"server_mac"="c0:ff:ee:00:00:01"')
+	options='"lease_time"="3600" "router"="10.0.0.1" "server_id"="10.0.0.1" "server_mac"="c0:ff:ee:00:00:01"')
 
 for portnum in {1..3}; do
 	port=port${portnum}
