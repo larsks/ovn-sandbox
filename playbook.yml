@@ -66,6 +66,24 @@
       when: >-
         "ptcp:6642" not in sb_connection.stdout
 
+    - name: enable ip forwarding
+      sysctl:
+        name: "net.ipv4.ip_forward"
+        value: '1'
+        sysctl_set: true
+
+    - name: check for NAT rule
+      command: >-
+        iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+      register: ipt
+      failed_when: false
+      changed_when: ipt.rc != 0
+
+    - name: create NAT rule
+      command: >-
+        iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+      when: ipt is changed
+
 - hosts: ovn_nodes
   tags: [services]
   tasks:
@@ -135,5 +153,4 @@
         dest: "{{ item }}"
       loop:
         - create-port-ns.sh
-        - create-network-1.sh
-        - create-network-2.sh
+        - create-network.sh
