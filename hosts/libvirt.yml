@@ -1,0 +1,13 @@
+---
+plugin: libvirt_inventory
+#uri: qemu:///session
+include_inactive: true
+networks:
+  - 192.168.122.0/24
+loglevel: debug
+
+compose:
+  ansible_user: '"root"'
+
+groups:
+  ovn: inventory_hostname.startswith('ovn')
