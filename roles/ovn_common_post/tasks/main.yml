@@ -1,0 +1,36 @@
+---
+- name: get ovs configuration
+  command: >-
+    ovs-vsctl get open_vswitch . external_ids:{{ item.key }}
+  register: ovs_config
+  changed_when: ovs_config.rc != 0
+  failed_when: false
+  loop:
+    - key: ovn-remote
+      value: "tcp:{{ ovn_controller }}:6642"
+    - key: ovn-encap-ip
+      value: "{{ ansible_default_ipv4.address }}"
+    - key: ovn-encap-type
+      value: geneve
+    - key: system-id
+      value: "{{ inventory_hostname }}"
+  loop_control:
+    label: "{{ item.key }}"
+  vars:
+    ovn_controller: >-
+      {{ hostvars[groups.ovn_central.0].ansible_default_ipv4.address }}
+    local_address: >-
+      {{ ansible_default_ipv4.address }}
+
+- name: set ovs configuration
+  command: >-
+    ovs-vsctl set open-vswitch .
+    external_ids:{{ item.item.key }}={{ item.item.value }}
+  when: >-
+    item is changed or (
+    item.stdout != item.item.value
+    and item.stdout != '"%s"' % (item.item.value))
+  loop: "{{ ovs_config.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+

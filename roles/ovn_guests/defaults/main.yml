@@ -1,0 +1,4 @@
+---
+ovn_node_count: 3
+ovn_node_ram: 2048
+ovn_node_disk_size: 10

@@ -8,6 +8,7 @@ loglevel: debug
 
 compose:
   ansible_user: '"root"'
+  ansible_python_interpreter: '"/usr/bin/python3"'
 
 groups:
   ovn: inventory_hostname.startswith('ovn')

@@ -1,0 +1,3 @@
+---
+ovn_base_ram: 2500
+fedora_mirror: http://mirror.math.princeton.edu/pub/fedora/linux/releases/31/Everything/x86_64/os/

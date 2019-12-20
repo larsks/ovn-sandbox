@@ -1,0 +1,47 @@
+---
+- name: delete existing nodes
+  shell: |
+    virsh destroy {{ node }}
+    virsh undefine --remove-all-storage {{ node }}
+  register: nodedel
+  failed_when: false
+  changed_when: nodedel.rc == 0
+  when: ovn_recreate|default(false)|bool
+  vars:
+    node: "ovn{{ item }}"
+  loop: "{{ range(ovn_node_count)|list }}"
+  loop_control:
+    label: "{{ node }}"
+
+- name: check for existing nodes
+  command: >-
+    virsh dominfo {{ node }}
+  register: nodecheck
+  failed_when: false
+  changed_when: nodecheck.rc != 0
+  vars:
+    node: "ovn{{ item }}"
+  loop: "{{ range(ovn_node_count)|list }}"
+  loop_control:
+    label: "{{ node }}"
+
+- name: create ovn nodes
+  command: >-
+    virt-install
+      -r {{ ovn_node_ram }}
+      --os-variant rhel7.7
+      --controller=scsi,model=virtio-scsi
+      --noautoconsole
+      -w network={{ ovn_network }}
+      --cpu host-model
+      --import
+      --disk pool={{ovn_pool}},size={{ovn_node_disk_size}},format=qcow2,backing_store={{ ovn_base_image }},backing_format=qcow2,bus=scsi
+      -n {{ node }}
+  vars:
+    node: "ovn{{ item.item }}"
+  when: item is changed
+  loop: "{{ nodecheck.results }}"
+  loop_control:
+    label: "{{ node }}"
+
+- meta: refresh_inventory

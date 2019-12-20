@@ -1,156 +1,54 @@
 ---
-- hosts: ovn
+- hosts: localhost
+  gather_facts: false
+  vars:
+    ovn_pool: default
+    ovn_network: default
+    ovn_base_image: ovn-base.qcow2
   tasks:
-    - name: get current hostname
-      command: hostname
-      register: hostname
+    - include_role:
+        name: ovn_base_image
+
+    - include_role:
+        name: ovn_guests
+
+- hosts: ovn
+  gather_facts: false
+  tasks:
+    - name: wait for nodes to acquire addresses
+      delegate_to: localhost
+      command: >-
+        ansible-inventory --host {{ inventory_hostname }}
+      register: nodecheck
       changed_when: false
+      until: >-
+        (nodecheck.stdout|from_json).ansible_host|default('')|ipaddr
+      retries: 30
+      delay: 1
 
-    - name: set hostname
-      command: hostnamectl set-hostname {{inventory_hostname}}
-      when: hostname.stdout != inventory_hostname
-
-    - name: restart avahi
-      service:
-        name: avahi-daemon
-        state: restarted
-      when: hostname.stdout != inventory_hostname
-
-    - name: ensure python-selinux is available
-      package:
-        name: python3-libselinux
-        state: installed
+    - meta: refresh_inventory
 
 - hosts: ovn
-  tags: [services]
   tasks:
-    - name: activate openvswitch
-      service:
-        name: openvswitch
-        state: started
-        enabled: true
+    - name: ensure inventory has an address for this node
+      fail:
+        msg: no address available
+      when: not ansible_host|ipaddr
+
+    - name: wait for nodes to boot
+      wait_for_connection:
+
+- hosts: ovn
+  tasks:
+    - include_role:
+        name: ovn_common_pre
 
 - hosts: ovn_central
-  tags: [services]
   tasks:
-    - name: activate ovn services
-      service:
-        name: "{{ item }}"
-        state: started
-        enabled: true
-      loop:
-        - ovn-controller
-        - ovn-northd
-
-    - name: get nb connection
-      command: >-
-        ovn-nbctl get-connection
-      register: nb_connection
-      changed_when: false
-
-    - name: get sb connection
-      command: >-
-        ovn-sbctl get-connection
-      register: sb_connection
-      changed_when: false
-
-    - name: set nb connection
-      command: >-
-        ovn-nbctl set-connection ptcp:6641
-      when: >-
-        "ptcp:6641" not in nb_connection.stdout
-
-    - name: set sb connection
-      command: >-
-        ovn-sbctl set-connection ptcp:6642
-      when: >-
-        "ptcp:6642" not in sb_connection.stdout
-
-    - name: enable ip forwarding
-      sysctl:
-        name: "net.ipv4.ip_forward"
-        value: '1'
-        sysctl_set: true
-
-    - name: check for NAT rule
-      command: >-
-        iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
-      register: ipt
-      failed_when: false
-      changed_when: ipt.rc != 0
-
-    - name: create NAT rule
-      command: >-
-        iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
-      when: ipt is changed
-
-- hosts: ovn_nodes
-  tags: [services]
-  tasks:
-    - name: activate ovn services
-      service:
-        name: "{{ item }}"
-        state: started
-        enabled: true
-      loop:
-        - ovn-controller
+    - include_role:
+        name: ovn_controller
 
 - hosts: ovn
-  tags: [ovs_config]
   tasks:
-    - name: get ovs configuration
-      command: >-
-        ovs-vsctl get open_vswitch . external_ids:{{ item.key }}
-      register: ovs_config
-      changed_when: ovs_config.rc != 0
-      failed_when: false
-      loop:
-        - key: ovn-remote
-          value: "tcp:{{ ovn_controller }}:6642"
-        - key: ovn-encap-ip
-          value: "{{ ansible_default_ipv4.address }}"
-        - key: ovn-encap-type
-          value: geneve
-        - key: system-id
-          value: "{{ inventory_hostname }}"
-      vars:
-        ovn_controller: >-
-          {{ hostvars[groups.ovn_central.0].ansible_default_ipv4.address }}
-        local_address: >-
-          {{ ansible_default_ipv4.address }}
-
-    - name: set ovs configuration
-      command: >-
-        ovs-vsctl set open-vswitch .
-        external_ids:{{ item.item.key }}={{ item.item.value }}
-      when: >-
-        item is changed or (
-        item.stdout != item.item.value
-        and item.stdout != '"%s"' % (item.item.value))
-      loop: "{{ ovs_config.results }}"
-
-- hosts: ovn_nodes
-  tags: [bridge]
-  tasks:
-    - name: check if integration bridge exists
-      command: >-
-        ovs-vsctl br-exists br-int
-      register: bridge_check
-      failed_when: false
-      changed_when: bridge_check.rc != 0
-
-    - name: create integration bridge
-      command: >-
-        ovs-vsctl add-br br-int -- set Bridge br-int fail-mode=secure
-      when: bridge_check is changed
-
-- hosts: ovn
-  tags: [scripts]
-  tasks:
-    - name: copy utility scripts to ovn nodes
-      copy:
-        src: "{{ item }}"
-        dest: "{{ item }}"
-      loop:
-        - create-port-ns.sh
-        - create-network.sh
+    - include_role:
+        name: ovn_common_post

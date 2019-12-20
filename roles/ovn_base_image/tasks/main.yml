@@ -1,0 +1,30 @@
+---
+- name: check if ovn-base image exists
+  command: >-
+    virsh vol-info --pool {{ ovn_pool }} {{ ovn_base_image }}
+  register: volcheck
+  failed_when: false
+  changed_when: volcheck.rc != 0
+
+- name: create ovn base image
+  when: volcheck is changed
+  block:
+    - name: create ovn-base volume
+      command: >-
+        virsh vol-create-as --pool default --format qcow2
+        {{ ovn_base_image }} 10g
+
+    - name: install fedora onto ovn-base volume
+      command: >-
+        virt-install -n ovn-base -r {{ ovn_base_ram }}
+          -w network={{ ovn_network }} --os-variant rhel7.7
+          --noautoconsole
+          --noreboot
+          --graphics none
+          --initrd-inject="{{ role_path }}/files/ovn-base.ks"
+          --extra-args="console=ttyS0,115200n8 ks=file:/ovn-base.ks"
+          --disk vol="{{ ovn_pool }}/{{ ovn_base_image }}"
+          --location="{{ fedora_mirror }}"
+          --console=file,path=$PWD/ovn-base.log
+          --transient --wait
+      failed_when: false

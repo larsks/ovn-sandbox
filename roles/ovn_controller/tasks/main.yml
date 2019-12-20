@@ -1,0 +1,50 @@
+---
+- name: activate ovn controller services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - ovn-northd
+
+- name: get nb connection
+  command: >-
+    ovn-nbctl get-connection
+  register: nb_connection
+  changed_when: false
+
+- name: get sb connection
+  command: >-
+    ovn-sbctl get-connection
+  register: sb_connection
+  changed_when: false
+
+- name: set nb connection
+  command: >-
+    ovn-nbctl set-connection ptcp:6641
+  when: >-
+    "ptcp:6641" not in nb_connection.stdout
+
+- name: set sb connection
+  command: >-
+    ovn-sbctl set-connection ptcp:6642
+  when: >-
+    "ptcp:6642" not in sb_connection.stdout
+
+- name: enable ip forwarding
+  sysctl:
+    name: "net.ipv4.ip_forward"
+    value: '1'
+    sysctl_set: true
+
+- name: check for NAT rule
+  command: >-
+    iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+  register: ipt
+  failed_when: false
+  changed_when: ipt.rc != 0
+
+- name: create NAT rule
+  command: >-
+    iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE
+  when: ipt is changed

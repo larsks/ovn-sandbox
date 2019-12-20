@@ -1,0 +1,36 @@
+---
+- name: get current hostname
+  command: hostname
+  register: hostname
+  changed_when: false
+
+- name: set hostname
+  command: hostnamectl set-hostname {{inventory_hostname}}
+  when: hostname.stdout != inventory_hostname
+
+- name: restart avahi
+  service:
+    name: avahi-daemon
+    state: restarted
+  when: hostname.stdout != inventory_hostname
+
+- name: activate common ovn services
+  service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - openvswitch
+    - ovn-controller
+
+- name: check if integration bridge exists
+  command: >-
+    ovs-vsctl br-exists br-int
+  register: bridge_check
+  failed_when: false
+  changed_when: bridge_check.rc != 0
+
+- name: create integration bridge
+  command: >-
+    ovs-vsctl add-br br-int -- set Bridge br-int fail-mode=secure
+  when: bridge_check is changed
